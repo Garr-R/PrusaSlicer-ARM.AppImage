@@ -1,0 +1,13 @@
+FROM debian:bookworm
+
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+
+RUN apt-get update && apt-get install -y sudo locales wget git jq curl python3-pip texinfo autoconf automake
+
+WORKDIR /ps
+
+COPY ./build.sh /ps/build.sh
+RUN chmod +x ./build.sh && ./build.sh dependencies && rm -f ./build.sh
+
+CMD ["./build.sh","automated"]

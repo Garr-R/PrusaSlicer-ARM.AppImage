@@ -48,6 +48,9 @@ case ${DPKG_ARCH} in
   "arm64")
     APPIMAGE_ARCH="aarch64"
     ;;
+  "amd64")
+    APPIMAGE_ARCH="x86_64"
+    ;;
   *)
     echo "Unknown architecture [arch: ${DPKG_ARCH}]."
     echo "Please update the build assistant to add support."
@@ -111,31 +114,49 @@ if ! hash appimage-builder >/dev/null; then
 
   sudo chmod +x /usr/local/bin/appimagetool
 
-    case "${DPKG_ARCH}" in
-      "armhf")
-        # 2023-02-06: Installing an older version to work around upstream issue where interpreter does not get placed into AppImages properly.
-        echo "Installing older version of appimage-builder to work around upstream issue for armhf .."
+  case "${DPKG_ARCH}" in
+    "armhf")
+      # 2023-02-06: Installing an older version to work around upstream issue where interpreter does not get placed into AppImages properly.
+      echo "Installing older version of appimage-builder to work around upstream issue for armhf .."
 
-        if ! pip3 install appimage-builder==0.9.2; then
-          echo "ERROR: Unable to install appimage-builder v0.9.2 for ${DPKG_ARCH} using pip3 .."
-          exit 1
-        fi
-        ;;
-      "arm64")
-        if ! pip3 install git+https://github.com/AppImageCrafters/appimage-builder.git; then
-          echo "ERROR: Unable to install appimage-builder using ${DPKG_ARCH} using pip3 .."
-          exit 1
-        fi
-        ;;
-      *)
-        echo "ERROR: Unable to install appimage-builder for ${DPKG_ARCH}. Please add support within build.sh."
+      if ! pip3 install appimage-builder==0.9.2; then
+        echo "ERROR: Unable to install appimage-builder v0.9.2 for ${DPKG_ARCH} using pip3 .."
         exit 1
-        ;;
-    esac
+      fi
+      ;;
+    "arm64")
+      if ! pip3 install git+https://github.com/AppImageCrafters/appimage-builder.git; then
+        echo "ERROR: Unable to install appimage-builder using ${DPKG_ARCH} using pip3 .."
+        exit 1
+      fi
+      ;;
+    "amd64")
+      if ! apt-get install -y pipx; then
+        echo "ERROR: Unable to install pipx for ${DPKG_ARCH} .."
+        exit 1
+      fi
 
+      if ! pipx install appimage-builder; then
+        echo "ERROR: Unable to install appimage-builder for ${DPKG_ARCH} using pip3 .."
+        exit 1
+      else
+        # Add location of installed appimage-builder to PATH if it is not already
+        pipx ensurepath
+        # shellcheck source=/dev/null
+        [[ -f "$HOME/.bashrc" ]] && source ~/.bashrc
+      fi
+      ;;
+    *)
+      echo "ERROR: Unable to install appimage-builder for ${DPKG_ARCH}. Please add support within build.sh."
+      exit 1
+      ;;
+  esac
+  
   if ! hash appimage-builder >/dev/null; then
     echo "ERROR: appimage-builder was installed but could not be found in your PATH: ${PATH}."
     echo "ERROR: hint (to find where appimage-builder was installed to): find ~/ -name appimage-builder"
+    # Showing the user how to modify $PATH temporarily
+    # shellcheck disable=SC2016
     echo 'ERROR: hint (to add the path, $HOME/.local/bin to $PATH temporarily): export PATH="$PATH:$HOME/.local/bin"'
     echo "ERROR: Re-run ./$0 if using the above hints"
     exit 1
@@ -271,9 +292,15 @@ for build_type in ${APPIMAGE_BUILD_TYPE}; do
 
   if [[ "${APPIMAGE_ARCH}" == "armhf" ]]; then
     # 2023-03-06: Older appimage-builder does not have appdir and finds directory OK
-    appimage-builder --recipe "AppImageBuilder-${APPIMAGE_ARCH}-${build_type}-${LATEST_VERSION}.yml"
+    if ! appimage-builder --recipe "AppImageBuilder-${APPIMAGE_ARCH}-${build_type}-${LATEST_VERSION}.yml"; then
+      echo "Failed to generate AppImage. Please check log output."
+      exit 1;
+    fi
   else
-    appimage-builder --appdir ./PrusaSlicer/build/AppDir --recipe "AppImageBuilder-${APPIMAGE_ARCH}-${build_type}-${LATEST_VERSION}.yml"
+    if ! appimage-builder --appdir ./PrusaSlicer/build/AppDir --recipe "AppImageBuilder-${APPIMAGE_ARCH}-${build_type}-${LATEST_VERSION}.yml"; then
+      echo "Failed to generate AppImage. Please check log output."
+      exit 1;
+    fi
   fi
 
   rm -f "AppImageBuilder-${APPIMAGE_ARCH}-${build_type}-${LATEST_VERSION}.yml"
@@ -317,7 +344,13 @@ These are for 64-bit distributions, ex: \`PrusaSlicer-${LATEST_VERSION}-aarch64.
 
 ##### Install dependencies
 
-To use this AppImage, dependencies on the host may be needed (Raspberry Pi OS). Run the following in a terminal to install them:
+Raspberry Pi OS **Bookwoorm** users: You may need to set your locale to UTF-8 if an error occurs after launching. On the desktop: \`Preferences > Raspberry Pi Configuration > Localization > Set Locale > Character Set > UTF-8\`. Reboot when prompted.
+
+Bookworm also needs the libfuse2 package:
+
+    sudo apt-get install -y libfuse2
+
+For other Raspberry Pi OS distributions, more dependencies on the host may be needed. Run the following in a terminal to install them:
 
 	sudo apt-get install -y git cmake libboost-dev libboost-regex-dev libboost-filesystem-dev \\
 	libboost-thread-dev libboost-log-dev libboost-locale-dev libcurl4-openssl-dev build-essential \\
